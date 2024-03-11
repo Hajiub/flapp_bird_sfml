@@ -1,189 +1,171 @@
-#include <SFML/Graphics.hpp>
 #include <iostream>
 #include <vector>
 #include <random>
 #include <ctime>
-#include <algorithm> 
+#include "./include/bird.hpp"
+#include "./include/pipe.hpp"
 
-using namespace sf;
-
-#define MAX(x, y) ((x) > (y) ? (x) : (y))
-#define MIN(x, y) ((x) > (y) ? (y) : (x))
-#define GRAVITY 0.6
-#define GAP 200
-#define SCROLL_SPEED 4.0f
-#define TIME_GAP 1.2f
-
-
-static int screenWidth  = 500;
+static int screenWidth = 500;
 static int screenHeight = 800;
+static bool gameOver = false;
+static int score = 0;
+static bool pass_pipe = false;
+
+
 std::mt19937 gen(std::time(nullptr));
-
-class Bird {
-public:
-    Texture birdTexture;
-    Sprite birdSprite;
-    Vector2u textureSize;
-    Vector2f position;
-    int screenHeight, currentFrame;
-    float vel;
-    float strenght;
-    bool gotPressed;
-    float rot;
-    
-    Bird(int screenHeight, const char* texturePath)
-        : screenHeight(screenHeight), currentFrame(0), rot(0.0f) {
-        birdTexture.loadFromFile(texturePath);
-        textureSize = birdTexture.getSize();
-        birdSprite.setTexture(birdTexture);
-        birdSprite.setTextureRect(IntRect(0, 0, textureSize.x / 3, textureSize.y));
-        position = (Vector2f) {100, float(screenHeight / 2 - textureSize.y / 2)};
-        birdSprite.setPosition(position);
-        birdSprite.setOrigin(textureSize.x / 6, textureSize.y / 2);
-        vel = 0.0f;
-        strenght = -12.0f;
-        gotPressed = false;
-    }
-
-    void Update(Event &event) {
-       if (event.type == Event::MouseButtonPressed && !gotPressed)
-           if (event.mouseButton.button == Mouse::Left) {
-                vel = strenght;
-                rot = -20;
-                gotPressed = true;
-           }
-       if (event.type == Event::MouseButtonReleased && gotPressed)
-           if (event.mouseButton.button == Mouse::Left) {
-               gotPressed = false;
-           }
-
-       vel += GRAVITY; 
-       vel = MAX(strenght, MIN(vel, -(strenght)));
-       if (vel > 5)
-          rot += vel;
-       rot = MAX(-80, MIN(rot, 80));
-       position.y += vel;
-       position.y = MAX(-100, MIN(position.y, 630));
-       birdSprite.setPosition(position);
-       birdSprite.setRotation(rot);
-
-    }
-
-   void Draw(RenderWindow& window) {
-        window.draw(birdSprite);
-    }
-};
-
-class Pipe {
-    public:
-        Vector2f top_pos, bottom_pos;
-        Sprite top_sprite, bottom_sprite;
-        Vector2u size;
-        Pipe(float x, float y, Texture &pipe_top, Texture &pipe_bottom) {
-            size = pipe_top.getSize();
-            top_pos = Vector2f(x, y);
-            top_sprite.setTexture(pipe_top);
-            top_sprite.setPosition(top_pos);
-
-            bottom_pos = Vector2f(top_pos.x, top_pos.y + size.y + GAP);
-            bottom_sprite.setTexture(pipe_bottom);
-            bottom_sprite.setPosition(bottom_pos);
-        }
-
-        void Update() 
-        {
-            top_pos.x -= SCROLL_SPEED;
-            bottom_pos.x -= SCROLL_SPEED;
-            top_sprite.setPosition(top_pos);
-            bottom_sprite.setPosition(bottom_pos);
-        }
-
-        void Draw(RenderWindow &win)
-        {
-           win.draw(bottom_sprite);
-           win.draw(top_sprite);
-        }
-
-        bool isOutOfBounds() const {
-            return (top_pos.x + size.x < 0);
-        }
-};
 
 int randint(int min, int max) {
     std::uniform_int_distribution<int> dist(min, max);
     return dist(gen);
 }
 
+bool isIntersecting(const sf::Sprite& sprite1, const sf::Sprite& sprite2) {
+    return sprite1.getGlobalBounds().intersects(sprite2.getGlobalBounds());
+}
 
-int main() 
-{
-    // Window
+void managePipes(std::vector<Pipe>& pipes, sf::Clock& clock, sf::Texture& topPipeTexture, sf::Texture& bottomPipeTexture) {
+    float elapsed = clock.getElapsedTime().asSeconds();
+
+    pipes.erase(std::remove_if(pipes.begin(), pipes.end(),
+                               [](const Pipe& p) { return p.isOutOfBounds(); }),
+                pipes.end());
+
+    if (elapsed >= TIME_GAP) {
+        pipes.emplace_back(screenWidth, randint(-200, 0), topPipeTexture, bottomPipeTexture);
+        clock.restart();
+    }
+}
+
+
+void resetGame(Bird& bird, std::vector<Pipe>& pipes) {
+    bird.reset();
+    pipes.clear();
+    gameOver = false;
+    score = 0;
+    pass_pipe = false;
+}
+
+int main() {
     sf::RenderWindow window(sf::VideoMode(screenWidth, screenHeight), "Flappy Bird", sf::Style::Titlebar | sf::Style::Close);
     window.setFramerateLimit(60);
-    // Background 
-    sf::Texture backgroundTexture, groundTexture;
-    if (!backgroundTexture.loadFromFile("./Assets/background.png") || !groundTexture.loadFromFile("./Assets/ground.png")) {
+    sf::Image icon;
+    if (!icon.loadFromFile("./Assets/icon.png")) {
+        return EXIT_FAILURE;
+    }
+    window.setIcon(icon.getSize().x, icon.getSize().y, icon.getPixelsPtr());
+
+    // Load sounds
+    // die.wav  hit.wav  point.wav  swoosh.wav  wing.wav
+    sf::SoundBuffer die, hit, point, wing;
+    if (!die.loadFromFile("./Assets/Sounds/die.wav") || 
+        !hit.loadFromFile("./Assets/Sounds/hit.wav") || 
+        !point.loadFromFile("./Assets/Sounds/point.wav")||
+        !wing.loadFromFile("./Assets/Sounds/wing.wav")) {
+        std::cerr << "Failed to load sounds!" << std::endl;
+        return EXIT_FAILURE;
+    }
+    sf::Sound die_sound = sf::Sound(die);
+    sf::Sound hit_sound  = sf::Sound(hit);
+    sf::Sound point_sound = sf::Sound(point);
+    point_sound.setBuffer(point);
+    // Load textures
+    sf::Texture backgroundTexture, groundTexture, topPipeTexture, bottomPipeTexture;
+    if (!backgroundTexture.loadFromFile("./Assets/background.png") ||
+        !groundTexture.loadFromFile("./Assets/ground.png") ||
+        !topPipeTexture.loadFromFile("./Assets/top_pipe.png") ||
+        !bottomPipeTexture.loadFromFile("./Assets/bottom_pipe.png")) {
         std::cerr << "Failed to load textures" << std::endl;
         return EXIT_FAILURE;
     }
+
+    // Create sprites
     sf::Sprite backgroundSprite(backgroundTexture), groundSprite(groundTexture);
-    // Ground
+
+    // Set ground position
     sf::Vector2f groundPos(0, screenHeight - groundSprite.getGlobalBounds().height);
     groundSprite.setPosition(groundPos);
-    // Bird
-    Bird bird(screenHeight, "./Assets/yellow_bird.png");
-    float framesCounter = 0;
-    // pipes
-    Texture top_pipe, bottom_pipe;
-    if (!top_pipe.loadFromFile("./Assets/top_pipe.png") || !bottom_pipe.loadFromFile("./Assets/bottom_pipe.png")) {
-        std::cout << "Failed to load pipe textures\n";
+
+    // Create bird
+    Bird bird(screenHeight, "./Assets/yellow_bird.png", wing);
+
+    // Create pipes
+    std::vector<Pipe> pipes;
+    pipes.emplace_back(screenWidth, randint(-200, 0), topPipeTexture, bottomPipeTexture);
+
+    sf::Clock clock;
+    sf::Font font;
+    if (!font.loadFromFile("./Assets/Score/flappy-font.ttf")) {
+        std::cerr << "Failed to load font" << std::endl;
         return EXIT_FAILURE;
     }
-    std::vector<Pipe> pipes;
-    pipes.emplace_back(screenWidth, randint(-200, 0), top_pipe, bottom_pipe);
-    Clock clock;
-    float elapsed;
+    sf::Text scoreText;
+    scoreText.setFont(font);
+    scoreText.setCharacterSize(44);
+    scoreText.setFillColor(sf::Color::White);
+    scoreText.setPosition(screenWidth / 2, 20);
+
     while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 window.close();
             }
+            if (event.type == sf::Event::MouseButtonPressed && gameOver) {
+                resetGame(bird, pipes);
+            }
         }
 
-        if (++framesCounter >= (60/15))
-        {
-           if (++bird.currentFrame > 2) bird.currentFrame = 0;
-           bird.birdSprite.setTextureRect(IntRect(bird.currentFrame * bird.textureSize.x / 3, 0, bird.textureSize.x / 3, bird.textureSize.y));
-           framesCounter = 0;
+        if (!gameOver) {
+            managePipes(pipes, clock, topPipeTexture, bottomPipeTexture);
+            groundPos.x -= SCROLL_SPEED;
+            if (groundPos.x <= -80) {
+                groundPos.x = 0;
+            }
+            groundSprite.setPosition(groundPos);
+
+            for (Pipe& pipe : pipes) {
+                pipe.update();
+                if (isIntersecting(bird.getSprite(), pipe.getTopSprite()) ||
+                    isIntersecting(bird.getSprite(), pipe.getBottomSprite())) {
+                    hit_sound.play();
+                    die_sound.play();
+                    gameOver = true;
+                }
+            }
+
+            // Score
+            Pipe pipe = pipes.front();
+            if (bird.getPosition().x > pipe.getPosition().x &&
+                bird.getPosition().x + bird.getSize().x / 3 < pipe.getPosition().x + pipe.getSize().x ) {
+                pass_pipe = true;
+            }   
+
+            if (pass_pipe) {
+                if(bird.getPosition().x + bird.getSize().x / 3 > pipe.getPosition().x + pipe.getSize().x) {
+                    point_sound.play(); 
+                    score += 1;
+                    pass_pipe = false; 
+                }
+            }
+
+           if (bird.getPosition().y + bird.getSize().y  >= groundPos.y) {
+                hit_sound.play();
+                gameOver = true;
+            }
+
+            bird.animate();
+            bird.flap(event);
         }
- 
-        elapsed  = clock.getElapsedTime().asSeconds();
-
-        pipes.erase(std::remove_if(pipes.begin(), pipes.end(),
-                [](const Pipe& p) { return p.isOutOfBounds(); }),
-                pipes.end());
-
-        if (elapsed >= TIME_GAP) {
-           pipes.emplace_back(screenWidth, randint(-200, 0), top_pipe, bottom_pipe);
-           clock.restart();
-        }
-
-        groundPos.x -= SCROLL_SPEED;
-        if (groundPos.x <= -80) {
-            groundPos.x = 0;
-        }
-        groundSprite.setPosition(groundPos);
-
+        scoreText.setString(std::to_string(score));
         window.clear(sf::Color(135, 206, 235));
         window.draw(backgroundSprite);
-        for (Pipe &pipe: pipes){
-            pipe.Update();
-            pipe.Draw(window);
+        for (Pipe& pipe : pipes) {
+            pipe.draw(window);
         }
         window.draw(groundSprite);
-        bird.Update(event);
-        bird.Draw(window);
+        bird.applyGravity();
+        bird.draw(window);
+        window.draw(scoreText);
         window.display();
     }
 

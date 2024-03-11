@@ -1,6 +1,6 @@
 CC = c++
-LIBS = -lsfml-graphics -lsfml-window -lsfml-system
-SRC = main.cpp
+LIBS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
+SRC = main.cpp ./src/bird.cpp ./src/pipe.cpp
 EXEC = flappy
 
 all:
