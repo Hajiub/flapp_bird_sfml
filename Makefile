@@ -1,25 +1,18 @@
-# Compiler
 CC = g++
 
-# Compiler flags
 CFLAGS = -Wall -Wextra -std=c++11
 
-# Libraries
 LIBS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
 
-# Directories
 SRCDIR = src
 INCDIR = include
 BINDIR = bin
 
-# Source files
 SRC = $(wildcard $(SRCDIR)/*.cpp)
 OBJ = $(SRC:$(SRCDIR)/%.cpp=$(BINDIR)/%.o)
 
-# Executable name
 EXEC = $(BINDIR)/flappy
 
-# Targets
 all: $(EXEC)
 
 $(EXEC): $(OBJ)
