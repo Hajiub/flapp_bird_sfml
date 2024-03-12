@@ -1,13 +1,36 @@
-CC = c++
-LIBS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
-SRC = main.cpp ./src/bird.cpp ./src/pipe.cpp
-EXEC = flappy
+# Compiler
+CC = g++
 
-all:
-	$(CC) $(SRC) -o $(EXEC) $(LIBS)
+# Compiler flags
+CFLAGS = -Wall -Wextra -std=c++11
+
+# Libraries
+LIBS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio
+
+# Directories
+SRCDIR = src
+INCDIR = include
+BINDIR = bin
+
+# Source files
+SRC = $(wildcard $(SRCDIR)/*.cpp)
+OBJ = $(SRC:$(SRCDIR)/%.cpp=$(BINDIR)/%.o)
+
+# Executable name
+EXEC = $(BINDIR)/flappy
+
+# Targets
+all: $(EXEC)
+
+$(EXEC): $(OBJ)
+	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
+
+$(BINDIR)/%.o: $(SRCDIR)/%.cpp
+	@mkdir -p $(BINDIR)
+	$(CC) $(CFLAGS) -I$(INCDIR) -c $< -o $@
 
 clean:
-	rm -f $(EXEC)
+	rm -rf $(BINDIR)
 
-run:
-	./$(EXEC)
+run: $(EXEC)
+	$(EXEC)

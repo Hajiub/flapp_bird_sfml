@@ -9,7 +9,7 @@ class Bird {
 public:
     explicit Bird(int screenHeight, const std::string& texturePath, sf::SoundBuffer &buffer);
     void reset();
-    void flap(const sf::Event& event);
+    void flap(const sf::Event &event);
     void applyGravity();
     void draw(sf::RenderWindow& window);
     void animate();

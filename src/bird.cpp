@@ -8,17 +8,20 @@ Bird::Bird(int screenHeight, const std::string& texturePath, sf::SoundBuffer &bu
     birdSprite.setTexture(birdTexture);
     textureSize = birdTexture.getSize();
     birdSprite.setOrigin(sf::Vector2f(textureSize.x / 6, textureSize.y / 2));
+    birdSprite.setTextureRect(sf::IntRect(0, 0, textureSize.x /3, textureSize.y));
     wing.setBuffer(buffer);
     reset();
 }
 
 void Bird::reset() {
     position = sf::Vector2f(100.0f, screenHeight / 2.0f); // Example starting position
+    birdSprite.setPosition(position);
     velocity = 0.0f;
     currentFrame = 0;
     framesCounter = 0;
     gotPressed = false;
     rotation = 0.0f;
+    birdSprite.setRotation(rotation);
 }
 
 void Bird::flap(const sf::Event &event)
@@ -50,7 +53,7 @@ void Bird::animate(void)
 void Bird::applyGravity(void)
 {
     velocity += gravity;
-    velocity = MAX(strength, MIN(velocity, -(strength)));
+    velocity = MAX(strength, MIN(velocity, 20));
     if (velocity > 5)
         rotation += velocity;
     rotation = MAX(-80, MIN(rotation, 80));
